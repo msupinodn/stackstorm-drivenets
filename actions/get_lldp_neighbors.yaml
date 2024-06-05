@@ -1,0 +1,10 @@
+name: get_dnos_neighbors
+pack: drivenets
+runner_type: python-script
+description: "Get DNOS LLDP neighbors"
+enabled: true
+entry_point: "get_lldp_neighbors.py"
+parameters:
+    hosts:
+        type: string
+        description: "dnos hostname"
