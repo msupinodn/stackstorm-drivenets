@@ -8,3 +8,10 @@ parameters:
     hosts:
         type: string
         description: "dnos hostname"
+    netbox_url:
+        type: string
+        description: "netbox_url"
+    netbox_secret:
+        type: string
+        description: "netbox secret"
+

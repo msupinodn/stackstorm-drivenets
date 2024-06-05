@@ -1,5 +1,4 @@
 import pynetbox
-from st2common.runners.base_action import Action
 from pprint import pprint
 import logging
 import ipaddress
@@ -7,15 +6,24 @@ import json
 from dataclasses import dataclass
 from netconf_conn import Netconf
 
+try:
+    from st2common.runners.base_action import Action
+except:
+    pass
+
 log = logging.getLogger(__name__)
 
 
 def get_lldp_info(host, port, username, password):
     neighbor_info = dict()
     detected_peers = list()
-    print(f'trying to connect to {host}, port {port}, with username {username}')
+    print(
+        f'trying to connect to {host}, port {port}, with username {username}')
     try:
-        conn = Netconf(host=host, port=port, user=username, password=password)
+        conn = Netconf(host=host,
+                       port=port,
+                       user=username,
+                       password=password)
 
         lldp_data = conn.get_lldp_data()
         router_config = conn.get_config()['rpc-reply']['data']['drivenets-top']
@@ -38,7 +46,6 @@ def get_lldp_info(host, port, username, password):
                     'local_interface_name': local_interface_name}
 
                 device_names.append(remote_system_name)
-                # print(json.dumps(neighbor_info))
                 try:
                     if ipaddress.ip_address(remote_mgmt_addr):
                         detected_peers.append(remote_mgmt_addr)
@@ -102,7 +109,7 @@ def push_netbox(lldp_info, router_config, all_devices, netbox_conn):
                 print(f'deleting {device_name}')
                 netbox_conn.dcim.devices.delete([_device.id])
 
-        print(f'adding dnos device {device_name}')
+        print(f'adding dnos device {device_name} to netbox')
         response = netbox_conn.dcim.devices.create(
             name=device_name,
             device_type=netbox_conn.dcim.device_types.get(name=netbox_mapping.device_types).id,
@@ -166,39 +173,35 @@ def push_netbox(lldp_info, router_config, all_devices, netbox_conn):
 
 
 class drivenets(Action):
-    def run(self, hosts):
+    def run(self, hosts, netbox_url, netbox_secret):
         lldp_info = dict()
         router_config = dict()
-        netbox_conn = pynetbox.api(url='http://100.64.6.154:8000',
-                                   token='3cb50016a9e0bcd3614947d93c3551a198260877')
+        netbox_conn = pynetbox.api(url=netbox_url,
+                                   token=netbox_secret)
 
         setup_netbox(netbox_conn)
-
         devices = json.loads(hosts)
 
         for device in devices:
             try:
-                hostname, neighbor_info, all_devices, detected_peers, config = get_lldp_info(device['host'],
-                                                                                             device['port'],
-                                                                                             device['username'],
-                                                                                             device['password'])
+                device_access = {"host": device['host'],
+                                 "port": device['port'],
+                                 "username": device['username'],
+                                 "password": device['password']}
+                hostname, neighbor_info, all_devices, detected_peers, config = get_lldp_info(**device_access)
                 lldp_info[hostname] = neighbor_info
                 router_config[hostname] = config
             except (ValueError, TypeError) as error:
                 print(f'failed to read line {device} - {error}')
 
-        # draw_graph(lldp_info)
-        # output_csv(lldp_info)
-        print(f"found {list(set(detected_peers))}")
-
         push_netbox(lldp_info, router_config, list(set(all_devices)), netbox_conn)
 
 
 if __name__ == "__main__":
-    drivenets().run()
-
-'''
-[
+    netbox_url = "http://100.64.6.154:8000"
+    netbox_secret = "3cb50016a9e0bcd3614947d93c3551a198260877"
+    runclass = drivenets()
+    runclass.run(hosts='''[
     {
         "host": "100.64.4.245",
         "port": "830",
@@ -211,5 +214,4 @@ if __name__ == "__main__":
         "username": "ansible",
         "password": "ansible"
     }
-]
-'''
+]''', netbox_url=netbox_url, netbox_secret=netbox_secret)
