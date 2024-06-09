@@ -1,7 +1,0 @@
----
-  port:
-    description: "port, default 830"
-    type: "string"
-    secret: false
-    required: false
-    default: "830"
