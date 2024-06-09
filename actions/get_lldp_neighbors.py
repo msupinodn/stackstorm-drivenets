@@ -1,17 +1,18 @@
 import pynetbox
+
 from pprint import pprint
-import logging
 import ipaddress
 import json
 from dataclasses import dataclass
-from netconf_conn import Netconf
+from lib.netconf_conn import Netconf
 
 try:
     from st2common.runners.base_action import Action
 except:
-    pass
-
-log = logging.getLogger(__name__)
+    import logging
+    class Action(object):
+        def __init__(self, *args, **kwargs):
+            self.logger = logging.getLogger(__name__)
 
 
 def get_lldp_info(host, port, username, password):
@@ -148,31 +149,41 @@ def push_netbox(lldp_info, router_config, all_devices, netbox_conn):
     for links in lldp_info.values():
         for link in links.values():
             try:
-                a_id = str(netbox_conn.dcim.interfaces.get(name=link.get('local_interface_name'),
-                                                           device=link.get('local_system_name')).id)
-                b_id = str(netbox_conn.dcim.interfaces.get(name=link.get('remote_interface_name'),
-                                                           device=link.get('remote_system_name')).id)
+                a_id = None
+                b_id = None
 
-                data_input = {
-                    "a_terminations": [
-                        {
-                            "object_type": "dcim.interface",
-                            "object_id": a_id
-                        }
-                    ],
-                    "b_terminations": [
-                        {
-                            "object_type": "dcim.interface",
-                            "object_id": b_id
-                        }
-                    ]
-                }
-                pprint(data_input)
-                netbox_conn.dcim.cables.create(data_input)
+                a_int = netbox_conn.dcim.interfaces.get(name=link.get('local_interface_name'),
+                                                        device=link.get('local_system_name'))
+                b_int = netbox_conn.dcim.interfaces.get(name=link.get('remote_interface_name'),
+                                                        device=link.get('remote_system_name'))
+                if a_int:
+                    a_id = str(a_int.id)
+
+                if b_int:
+                    b_id = str(b_int.id)
+
+                if a_id and b_id:
+                    data_input = {
+                        "a_terminations": [
+                            {
+                                "object_type": "dcim.interface",
+                                "object_id": a_id
+                            }
+                        ],
+                        "b_terminations": [
+                            {
+                                "object_type": "dcim.interface",
+                                "object_id": b_id
+                            }
+                        ]
+                    }
+                    pprint(data_input)
+                    netbox_conn.dcim.cables.create(data_input)
             except Exception as err:
                 print(err)
 
     pprint(all_devices)
+    return True
 
 
 class drivenets(Action):
@@ -197,13 +208,17 @@ class drivenets(Action):
             except (ValueError, TypeError) as error:
                 print(f'failed to read line {device} - {error}')
 
-        push_netbox(lldp_info, router_config, list(set(all_devices)), netbox_conn)
+        success = push_netbox(lldp_info, router_config, list(set(all_devices)), netbox_conn)
+        if success:
+            self.logger.info('Action successfully completed')
+        else:
+            self.logger.error('Action failed...')
 
 
 if __name__ == "__main__":
     netbox_url = "http://100.64.6.154:8000"
     netbox_secret = "3cb50016a9e0bcd3614947d93c3551a198260877"
-    runclass = drivenets()
+    runclass = drivenets(Action)
     runclass.run(hosts='''[
     {
         "host": "100.64.4.245",
