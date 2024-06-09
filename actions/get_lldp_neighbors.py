@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 
 def get_lldp_info(host, port, username, password):
+    conn = ""
     neighbor_info = dict()
     detected_peers = list()
     print(
@@ -53,13 +54,15 @@ def get_lldp_info(host, port, username, password):
                     pass
     except:
         try:
-            conn.close()
+            if conn:
+                conn.close()
         except:
             pass
         return
 
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
     return local_hostname, neighbor_info, device_names, detected_peers, router_config
 
