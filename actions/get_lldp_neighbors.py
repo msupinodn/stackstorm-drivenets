@@ -142,7 +142,6 @@ def push_netbox(lldp_info, router_config, router_version, all_devices, netbox_co
             device_type=device_type,
             role=netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles).id,
             site=netbox_conn.dcim.sites.get(name=netbox_mapping.site).id,
-            config_template="1",
             platform="1",
             custom_fields={"Config": str(router_config.get(device_name)),
                            "Version": router_version.get(device_name)})
