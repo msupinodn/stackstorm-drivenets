@@ -152,11 +152,11 @@ class Netconf:
             log.info("Error encountered while trying to get the bgp oper data.")
             raise DeviceGetException(f"Error getting bgp oper data from device: {str(e)}")
 
-    def system_version(self) -> Dict:
+    def system_info(self) -> Dict:
         if self.conn is None:
             raise DeviceConnectionException("No connection to device.")
         try:
-            filter = ("/dn-top:drivenets-top/system/oper-items/system-version")
+            filter = ("/dn-top:drivenets-top/system/oper-items")
             result: NCElement = self.conn.get(filter=('xpath', filter))
             return xmltodict.parse(str(result))
         except RPCError as e:

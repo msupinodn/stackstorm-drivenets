@@ -23,7 +23,7 @@ class netbox_mapping:
         pass
 
     site: str = "SiteA"
-    device_roles: str = "Leaf"
+    device_roles: str = "Router"
     manufacturers: str = "DRIVENETS"
     device_types: str = "dnos"
     model: str = "dnos_router"
@@ -31,10 +31,11 @@ class netbox_mapping:
 
 def setup_netbox(netbox_conn):
     if not netbox_conn.dcim.sites.get(name=netbox_mapping.site):
-        netbox_conn.dcim.sites.create({"name": netbox_mapping.site, "slug": netbox_mapping.site})
+        netbox_conn.dcim.sites.create({"name": netbox_mapping.site, "slug": netbox_mapping.site.lower()})
 
     if not netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles):
-        netbox_conn.dcim.device_roles.create({"name": netbox_mapping.device_roles, "slug": netbox_mapping.device_roles})
+        netbox_conn.dcim.device_roles.create(
+            {"name": netbox_mapping.device_roles, "slug": netbox_mapping.device_roles.lower()})
 
     if not netbox_conn.dcim.manufacturers.get(name="unknown"):
         netbox_conn.dcim.manufacturers.create(
@@ -42,7 +43,7 @@ def setup_netbox(netbox_conn):
 
     if not netbox_conn.dcim.manufacturers.get(name=netbox_mapping.manufacturers):
         netbox_conn.dcim.manufacturers.create(
-            {"name": netbox_mapping.manufacturers, "slug": netbox_mapping.manufacturers})
+            {"name": netbox_mapping.manufacturers, "slug": netbox_mapping.manufacturers.lower()})
 
     if not netbox_conn.dcim.device_types.get(model="unknown"):
         netbox_conn.dcim.device_types.create([{
@@ -78,8 +79,10 @@ def get_device_info(host, port, username, password, conn=None):
         device_details['router_config'] = drivenets_top_info
         device_details['host_addr'] = host
         device_details['local_hostname'] = drivenets_top_info['system']['config-items']['name']
+        device_details['system_type'] = \
+            conn.system_info()['rpc-reply']['data']['drivenets-top']['system']['oper-items']['system-type']
         device_details['system_version'] = \
-            conn.system_version()['rpc-reply']['data']['drivenets-top']['system']['oper-items'][
+            conn.system_info()['rpc-reply']['data']['drivenets-top']['system']['oper-items'][
                 'system-version']
 
         local_hostname = drivenets_top_info['system']['config-items']['name']
@@ -134,32 +137,38 @@ def output_csv(lldp_info):
 #        success = push_netbox(device_info, list(set(all_devices)), netbox_conn)
 
 def push_netbox(device_info, all_devices, netbox_conn):
-    def populating_devices(device_name, details):
+    def populating_devices(_device_name, _details):
         for _device in list(netbox_conn.dcim.devices.all()):
-            if _device.name == device_name:
-                print(f'deleting {device_name}')
+            if _device.name == _device_name:
+                print(f'deleting {_device_name}')
                 netbox_conn.dcim.devices.delete([_device.id])
 
-        device_type = netbox_conn.dcim.device_types.get(q=netbox_mapping.device_types).id
-        # if "unknown" in router_version.get(device_name, "unknown"):
-        #    device_type = device_type = netbox_conn.dcim.device_types.get(q="unknown").id
+        print(f"system_type {_details.get('system_type', 'unknown')}")
 
-        print(f'adding dnos device {device_name} to netbox, type {device_type}')
+        device_type = [x.id for x in netbox_conn.dcim.device_types.filter(q=_details.get('system_type')) if
+                       x.display == _details.get('system_type', "unknown")]
+
+        platform = netbox_conn.dcim.platforms.get(q="unknown").id
+        if _details.get('system_type'):
+            platform = netbox_conn.dcim.platforms.get(q="DNOS").id
+
+        print(f'adding dnos device {_device_name} to netbox, type {device_type}')
+        print(f"device_type {device_type}, system_type {_details.get('system_type')}")
 
         response = netbox_conn.dcim.devices.create(
-            name=device_name,
-            device_type=device_type,
+            name=_device_name,
+            device_type=device_type[0],
             role=netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles).id,
             site=netbox_conn.dcim.sites.get(name=netbox_mapping.site).id,
-            platform="4",
-            custom_fields={"Config": str(details.get('router_config')),
-                           "Version": str(details.get('system_version'))}
+            platform=platform,
+            custom_fields={"Config": str(_details.get('router_config')),
+                           "Version": str(_details.get('system_version'))}
         )
 
         print(response)
 
         for _device in list(netbox_conn.dcim.devices.all()):
-            if _device.name == device_name:
+            if _device.name == _device_name:
                 current_device_id = _device.id
 
         netbox_conn.dcim.interfaces.create(
@@ -170,12 +179,12 @@ def push_netbox(device_info, all_devices, netbox_conn):
             description="mgmt0"
         )
         netbox_ip = None
-        if details.get("host_addr"):
-            device_ipv4_address = f'{details.get("host_addr")}/32'
+        if _details.get("host_addr"):
+            device_ipv4_address = f'{_details.get("host_addr")}/32'
             if netbox_conn.ipam.ip_addresses.get(address=device_ipv4_address):
                 netbox_conn.ipam.ip_addresses.delete(
                     [netbox_conn.ipam.ip_addresses.get(address=device_ipv4_address).id])
-            interface = netbox_conn.dcim.interfaces.get(name="mgmt0", device=device_name)
+            interface = netbox_conn.dcim.interfaces.get(name="mgmt0", device=_device_name)
             netbox_ip = netbox_conn.ipam.ip_addresses.create(address=device_ipv4_address)
             netbox_ip.assigned_object = interface
             netbox_ip.assigned_object_id = interface.id
@@ -188,8 +197,8 @@ def push_netbox(device_info, all_devices, netbox_conn):
             update_device.primary_ip4 = netbox_ip.id
             update_device.save()
 
-        if details.get('lldp_info'):
-            for network_interface in details.get('lldp_info').items():
+        if _details.get('lldp_info'):
+            for network_interface in _details.get('lldp_info').items():
                 response = netbox_conn.dcim.interfaces.create(
                     device=current_device_id,
                     name=network_interface[-1].get('local_interface_name'),
@@ -276,6 +285,7 @@ class drivenets(Action):
                 device_info[hostname]['host_addr'] = _device_details.get('host_addr')
                 device_info[hostname]['lldp_info'] = _neighbor_info
                 device_info[hostname]['router_config'] = _device_details.get('router_config')
+                device_info[hostname]['system_type'] = _device_details.get('system_type')
                 device_info[hostname]['system_version'] = _device_details.get('system_version')
             except (ValueError, TypeError) as error:
                 print(f'failed to read line {device} - {error}')
@@ -292,20 +302,6 @@ if __name__ == "__main__":
     netbox_secret = "3cb50016a9e0bcd3614947d93c3551a198260877"
     runclass = drivenets(Action)
     runclass.run(hosts='''[
-    {
-        "host": "100.64.6.84",
-        "port": "830",
-        "username": "ansible",
-        "password": "ansible",
-        "hostname": "DAL00"
-    },
-    {
-        "host": "100.64.6.116",
-        "port": "830",
-        "username": "ansible",
-        "password": "ansible",
-        "hostname": "ATL00"  
-    },
     {
         "host": "100.64.5.224",
         "port": "830",
