@@ -17,79 +17,14 @@ except:
             self.logger = logging.getLogger(__name__)
 
 
-def get_device_info(host, port, username, password):
-    conn = ""
-    neighbor_info = dict()
-    detected_peers = list()
-    print(
-        f'trying to connect to {host}, port {port}, with username {username}')
-    try:
-        conn = Netconf(host=host,
-                       port=port,
-                       user=username,
-                       password=password)
-
-        lldp_data = conn.get_lldp_data()
-        router_config = conn.get_config()['rpc-reply']['data']['drivenets-top']
-        local_hostname = router_config['system']['config-items']['name']
-        system_version = conn.system_version()['rpc-reply']['data']['drivenets-top']['system']['oper-items'][
-            'system-version']
-        lldp_neighbors = lldp_data['rpc-reply']['data']['drivenets-top']['protocols']['lldp']['interfaces']['interface']
-        device_names = list()
-
-        for item in lldp_neighbors:
-            if item.get('neighbors'):
-                local_interface_name = item.get('name')
-                remote_interface_name = item.get('neighbors').get('neighbor').get('oper-items').get('port-id')
-                remote_system_name = item.get('neighbors').get('neighbor').get('oper-items').get('system-name')
-                remote_mgmt_addr = item.get('neighbors').get('neighbor').get('oper-items').get('management-address')
-                system_description = item.get('neighbors').get('neighbor').get('oper-items').get('system-description')
-                neighbor_info[local_interface_name] = {
-                    'local_host_addr': host,
-                    'local_system_name': local_hostname,
-                    'remote_mgmt_addr': remote_mgmt_addr,
-                    'remote_system_name': remote_system_name,
-                    'remote_interface_name': remote_interface_name,
-                    'local_interface_name': local_interface_name,
-                    'system_description': system_description}
-
-                pprint(neighbor_info[local_interface_name])
-                device_names.append(remote_system_name)
-                try:
-                    if ipaddress.ip_address(remote_mgmt_addr):
-                        detected_peers.append(remote_mgmt_addr)
-                except ValueError:
-                    pass
-    except:
-        try:
-            if conn:
-                conn.close()
-        except:
-            pass
-        return
-
-    finally:
-        if conn:
-            conn.close()
-
-    return local_hostname, neighbor_info, device_names, detected_peers, router_config, system_version
-
-
-def output_csv(lldp_info):
-    for key, value in lldp_info.items():
-        for item in value.items():
-            print(
-                f'{key},{item[1].get("remote_system_name")},{item[1].get("local_interface_name")},{item[1].get("remote_interface_name")}')
-
-
 @dataclass
 class netbox_mapping:
     def run(self):
         pass
 
     site: str = "SiteA"
-    device_roles: str = "router"
-    manufacturers: str = "drivenets"
+    device_roles: str = "Leaf"
+    manufacturers: str = "DRIVENETS"
     device_types: str = "dnos"
     model: str = "dnos_router"
 
@@ -124,7 +59,81 @@ def setup_netbox(netbox_conn):
         }])
 
 
-def push_netbox(lldp_info, router_config, router_version, all_devices, netbox_conn):
+def get_device_info(host, port, username, password, conn=None):
+    neighbor_info = dict()
+    device_details = dict()
+    detected_peers = list()
+
+    print(f'trying to connect to {host}, port {port}, with username {username}')
+    try:
+        discovered_device_names = list()
+
+        conn = Netconf(host=host,
+                       port=port,
+                       user=username,
+                       password=password)
+
+        drivenets_top_info = conn.get_config()['rpc-reply']['data']['drivenets-top']
+
+        device_details['router_config'] = drivenets_top_info
+        device_details['host_addr'] = host
+        device_details['local_hostname'] = drivenets_top_info['system']['config-items']['name']
+        device_details['system_version'] = \
+            conn.system_version()['rpc-reply']['data']['drivenets-top']['system']['oper-items'][
+                'system-version']
+
+        local_hostname = drivenets_top_info['system']['config-items']['name']
+
+        lldp_neighbors = conn.get_lldp_data()['rpc-reply']['data']['drivenets-top']['protocols']['lldp']['interfaces'][
+            'interface']
+
+        for item in lldp_neighbors:
+            if item.get('neighbors'):
+                local_interface_name = item.get('name')
+                remote_interface_name = item.get('neighbors').get('neighbor').get('oper-items').get('port-id')
+                remote_system_name = item.get('neighbors').get('neighbor').get('oper-items').get('system-name')
+                remote_mgmt_addr = item.get('neighbors').get('neighbor').get('oper-items').get('management-address')
+                system_description = item.get('neighbors').get('neighbor').get('oper-items').get('system-description')
+                neighbor_info[local_interface_name] = {
+                    'local_system_name': local_hostname,
+                    'remote_mgmt_addr': remote_mgmt_addr,
+                    'remote_system_name': remote_system_name,
+                    'remote_interface_name': remote_interface_name,
+                    'local_interface_name': local_interface_name,
+                    'system_description': system_description}
+
+                # pprint(neighbor_info[local_interface_name])
+                discovered_device_names.append(remote_system_name)
+                try:
+                    if ipaddress.ip_address(remote_mgmt_addr):
+                        detected_peers.append(remote_mgmt_addr)
+                except ValueError:
+                    pass
+    except:
+        try:
+            if conn:
+                conn.close()
+        except:
+            pass
+        return
+
+    finally:
+        if conn:
+            conn.close()
+
+    return local_hostname, device_details, neighbor_info, discovered_device_names, detected_peers
+
+
+def output_csv(lldp_info):
+    for key, value in lldp_info.items():
+        for item in value.items():
+            print(
+                f'{key},{item[1].get("remote_system_name")},{item[1].get("local_interface_name")},{item[1].get("remote_interface_name")}')
+
+
+#        success = push_netbox(device_info, list(set(all_devices)), netbox_conn)
+
+def push_netbox(device_info, all_devices, netbox_conn):
     def populating_devices(device_name, details):
         for _device in list(netbox_conn.dcim.devices.all()):
             if _device.name == device_name:
@@ -142,38 +151,71 @@ def push_netbox(lldp_info, router_config, router_version, all_devices, netbox_co
             device_type=device_type,
             role=netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles).id,
             site=netbox_conn.dcim.sites.get(name=netbox_mapping.site).id,
-            platform="1",
-            custom_fields={"Config": str(router_config.get(device_name)),
-                           "Version": router_version.get(device_name)})
+            platform="4",
+            custom_fields={"Config": str(details.get('router_config')),
+                           "Version": str(details.get('system_version'))}
+        )
 
         print(response)
+
         for _device in list(netbox_conn.dcim.devices.all()):
             if _device.name == device_name:
                 current_device_id = _device.id
 
-        for network_interface in details.items():
-            response = netbox_conn.dcim.interfaces.create(
-                device=current_device_id,
-                name=network_interface[-1].get('local_interface_name'),
-                enabled=True,
-                type="other",
-                description=network_interface[-1].get('system_description')
-            )
+        netbox_conn.dcim.interfaces.create(
+            device=current_device_id,
+            name="mgmt0",
+            enabled=True,
+            type="virtual",
+            description="mgmt0"
+        )
+        netbox_ip = None
+        if details.get("host_addr"):
+            device_ipv4_address = f'{details.get("host_addr")}/32'
+            if netbox_conn.ipam.ip_addresses.get(address=device_ipv4_address):
+                netbox_conn.ipam.ip_addresses.delete(
+                    [netbox_conn.ipam.ip_addresses.get(address=device_ipv4_address).id])
+            interface = netbox_conn.dcim.interfaces.get(name="mgmt0", device=device_name)
+            netbox_ip = netbox_conn.ipam.ip_addresses.create(address=device_ipv4_address)
+            netbox_ip.assigned_object = interface
+            netbox_ip.assigned_object_id = interface.id
+            netbox_ip.assigned_object_type = 'dcim.interface'
+            netbox_ip.save()
+
+        # Assign IP to device mgmt
+        if netbox_ip:
+            update_device = netbox_conn.dcim.devices.get(current_device_id)
+            update_device.primary_ip4 = netbox_ip.id
+            update_device.save()
+
+        if details.get('lldp_info'):
+            for network_interface in details.get('lldp_info').items():
+                response = netbox_conn.dcim.interfaces.create(
+                    device=current_device_id,
+                    name=network_interface[-1].get('local_interface_name'),
+                    enabled=True,
+                    type="100gbase-x-qsfp28",
+                    description=network_interface[-1].get('system_description'),
+                    label=f"{network_interface[-1].get('remote_system_name')}-{network_interface[-1].get('remote_interface_name')}"
+                )
 
             print(response)
 
-    pprint(all_devices)
+    # pprint(all_devices)
 
-    for device_name, details in lldp_info.items():
+    # Add managed devices
+    for device_name, details in device_info.items():
         if device_name in all_devices:
             all_devices.remove(device_name)
         populating_devices(device_name, details)
 
+    # Add unmnanaged devices
     for device_name in all_devices:
         populating_devices(device_name, {})
 
-    for links in lldp_info.values():
-        for link in links.values():
+    # add cable links
+    for device in device_info.values():
+        for link in device['lldp_info'].values():
             try:
                 a_id = None
                 b_id = None
@@ -208,15 +250,14 @@ def push_netbox(lldp_info, router_config, router_version, all_devices, netbox_co
             except Exception as err:
                 print(err)
 
-    pprint(all_devices)
+    # pprint(all_devices)
     return True
 
 
 class drivenets(Action):
     def run(self, hosts, netbox_url, netbox_secret):
-        lldp_info = dict()
-        router_config = dict()
-        router_version = dict()
+        device_info = dict()
+        all_devices = list()
         netbox_conn = pynetbox.api(url=netbox_url,
                                    token=netbox_secret)
 
@@ -229,15 +270,17 @@ class drivenets(Action):
                                  "port": device['port'],
                                  "username": device['username'],
                                  "password": device['password']}
-                hostname, neighbor_info, all_devices, detected_peers, config, system_version = get_device_info(
+                hostname, _device_details, _neighbor_info, all_devices, detected_peers = get_device_info(
                     **device_access)
-                lldp_info[hostname] = neighbor_info
-                router_config[hostname] = config
-                router_version[hostname] = system_version
+                device_info[hostname] = dict()
+                device_info[hostname]['host_addr'] = _device_details.get('host_addr')
+                device_info[hostname]['lldp_info'] = _neighbor_info
+                device_info[hostname]['router_config'] = _device_details.get('router_config')
+                device_info[hostname]['system_version'] = _device_details.get('system_version')
             except (ValueError, TypeError) as error:
                 print(f'failed to read line {device} - {error}')
 
-        success = push_netbox(lldp_info, router_config, router_version, list(set(all_devices)), netbox_conn)
+        success = push_netbox(device_info, list(set(all_devices)), netbox_conn)
         if success:
             self.logger.info('Action successfully completed')
         else:
@@ -253,6 +296,28 @@ if __name__ == "__main__":
         "host": "100.64.6.84",
         "port": "830",
         "username": "ansible",
-        "password": "ansible"
+        "password": "ansible",
+        "hostname": "DAL00"
+    },
+    {
+        "host": "100.64.6.116",
+        "port": "830",
+        "username": "ansible",
+        "password": "ansible",
+        "hostname": "ATL00"  
+    },
+    {
+        "host": "100.64.5.224",
+        "port": "830",
+        "username": "ansible",
+        "password": "ansible",
+        "hostname": "DAL01"
+    },
+    {
+        "host": "100.64.0.67",
+        "port": "830",
+        "username": "ansible",
+        "password": "ansible",
+        "hostname": "ATL01"
     }
 ]''', netbox_url=netbox_url, netbox_secret=netbox_secret)

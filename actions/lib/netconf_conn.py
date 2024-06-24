@@ -50,7 +50,7 @@ class Netconf:
             self.conn.close_session()
         except Exception as e:
             log.info("Error encountered while trying to close existing session.")
-            raise DeviceConnectionException(f"Error disconnecting from device: {str(e)}")
+            # raise DeviceConnectionException(f"Error disconnecting from device: {str(e)}")
 
     def commit(self):
         if self.conn is None:
@@ -161,4 +161,15 @@ class Netconf:
             return xmltodict.parse(str(result))
         except RPCError as e:
             log.info("Error encountered while trying to get the system oper data.")
+            raise DeviceGetException(f"Error getting bgp oper data from device: {str(e)}")
+
+    def interfaces_info(self) -> Dict:
+        if self.conn is None:
+            raise DeviceConnectionException("No connection to device.")
+        try:
+            filter = ("/dn-top:drivenets-top/interfaces/interface[name='mgmt0']/ipv4/addresses")
+            result: NCElement = self.conn.get(filter=('xpath', filter))
+            return xmltodict.parse(str(result))
+        except RPCError as e:
+            log.info("Error encountered while trying to get the interfaces data.")
             raise DeviceGetException(f"Error getting bgp oper data from device: {str(e)}")
