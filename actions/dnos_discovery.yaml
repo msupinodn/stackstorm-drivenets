@@ -1,9 +1,9 @@
-name: get_dnos_neighbors
+name: get_dnos_info
 pack: drivenets
 runner_type: python-script
-description: "Get DNOS LLDP neighbors"
+description: "Discovery and push DNOS infra to NetBox"
 enabled: true
-entry_point: "get_lldp_neighbors.py"
+entry_point: "dnos_discovery.py"
 parameters:
     hosts:
         type: string
