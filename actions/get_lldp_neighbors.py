@@ -75,17 +75,17 @@ def get_device_info(host, port, username, password, conn=None):
                        password=password)
 
         drivenets_top_info = conn.get_config()['rpc-reply']['data']['drivenets-top']
+        local_hostname = conn.system_info()['rpc-reply']['data']['drivenets-top']['system']['oper-items']['name']
 
         device_details['router_config'] = drivenets_top_info
         device_details['host_addr'] = host
-        device_details['local_hostname'] = drivenets_top_info['system']['config-items']['name']
+
+        device_details['local_hostname'] = local_hostname
         device_details['system_type'] = \
             conn.system_info()['rpc-reply']['data']['drivenets-top']['system']['oper-items']['system-type']
         device_details['system_version'] = \
             conn.system_info()['rpc-reply']['data']['drivenets-top']['system']['oper-items'][
                 'system-version']
-
-        local_hostname = drivenets_top_info['system']['config-items']['name']
 
         lldp_neighbors = conn.get_lldp_data()['rpc-reply']['data']['drivenets-top']['protocols']['lldp']['interfaces'][
             'interface']
@@ -222,6 +222,13 @@ def push_netbox(device_info, all_devices, netbox_conn):
     for device_name in all_devices:
         populating_devices(device_name, {})
 
+    # clear unterminated cables
+    empty_cables = list()
+    for cable in netbox_conn.dcim.cables.filter(unterminated=True):
+        empty_cables.append(cable)
+    if empty_cables:
+        netbox_conn.dcim.cables.delete(empty_cables)
+
     # add cable links
     for device in device_info.values():
         for link in device['lldp_info'].values():
@@ -287,8 +294,10 @@ class drivenets(Action):
                 device_info[hostname]['router_config'] = _device_details.get('router_config')
                 device_info[hostname]['system_type'] = _device_details.get('system_type')
                 device_info[hostname]['system_version'] = _device_details.get('system_version')
-            except (ValueError, TypeError) as error:
-                print(f'failed to read line {device} - {error}')
+            except Exception as err:
+                print(err)
+            # except (ValueError, TypeError) as error:
+            #    print(f'failed to read line {device} - {error}')
 
         success = push_netbox(device_info, list(set(all_devices)), netbox_conn)
         if success:
@@ -302,6 +311,13 @@ if __name__ == "__main__":
     netbox_secret = "3cb50016a9e0bcd3614947d93c3551a198260877"
     runclass = drivenets(Action)
     runclass.run(hosts='''[
+    {
+        "host": "100.64.5.54",
+        "port": "830",
+        "username": "ansible",
+        "password": "ansible",
+        "hostname": "RES-SA-5"
+    },
     {
         "host": "100.64.5.224",
         "port": "830",
