@@ -1,0 +1,7 @@
+        {{ name }}:
+            kind: linux
+            type: {{ type }}
+            binds:
+                - /lib/modules:/lib/modules
+            {% include 'clab/node_params.j2' %}
+            {% include 'clab/labels.j2' %}

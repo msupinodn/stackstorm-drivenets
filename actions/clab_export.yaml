@@ -1,0 +1,13 @@
+name: clab_export
+pack: drivenets
+runner_type: python-script
+description: "Export NetBox devices to clab template"
+enabled: true
+entry_point: "export_clab.py"
+parameters:
+    netbox_url:
+        type: string
+        description: "NetBox URL"
+    netbox_secret:
+        type: string
+        description: "Netbox Token"
