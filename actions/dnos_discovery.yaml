@@ -1,19 +1,16 @@
 name: get_dnos_info
 pack: drivenets
 runner_type: python-script
-description: "Discovery and push DNOS infra to NetBox"
+description: "Discover DNOS devices"
 enabled: true
 entry_point: "dnos_discovery.py"
 parameters:
     hosts:
         type: string
         description: "dnos hostname"
-        position: 0
-    netbox_url:
+        required: true
+    output_filename:
         type: string
-        description: "netbox_url"
-        position: 1
-    netbox_secret:
-        type: string
-        description: "netbox secret"
-        position: 2
+        description: "output filename"
+        default: "/tmp/dnos_discovery.json"
+        required: true

@@ -1,0 +1,20 @@
+name: populate_netbox
+pack: drivenets
+runner_type: python-script
+description: "Push DNOS infra to NetBox"
+enabled: true
+entry_point: "populate_netbox.py"
+parameters:
+    netbox_url:
+        type: string
+        description: "netbox_url"
+        required: true
+    netbox_secret:
+        type: string
+        description: "netbox secret"
+        required: true
+    input_filename:
+        type: string
+        description: "input filename"
+        default: "/tmp/dnos_discovery.json"
+        required: true

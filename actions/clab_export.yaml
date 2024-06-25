@@ -8,14 +8,14 @@ parameters:
     netbox_url:
         type: string
         description: "NetBox URL"
-        position: 0
+        required: true
     netbox_secret:
         type: string
         description: "Netbox Token"
-        position: 1
+        required: true
     template:
         type: string
         description: Template Type (CLAB or KNE)
-        position: 2
+        required: true
         default: "kne"
 
