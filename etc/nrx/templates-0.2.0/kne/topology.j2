@@ -1,0 +1,15 @@
+name: "{{name.lower()}}"
+{% for node in rendered_nodes: %}
+nodes: {
+{{ node }}
+}
+{% endfor %}
+
+{% for link in links: %}
+links: {
+    a_node: "{{link['a']['node']}}"
+    a_int: "{{link['a']['e_interface']}}"
+    z_node: "{{link['b']['node']}}"
+    z_int: "{{link['b']['e_interface']}}"
+}
+{% endfor %}

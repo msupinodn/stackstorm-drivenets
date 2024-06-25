@@ -21,3 +21,8 @@ formats:
     file_format: json
     file_extension: graphite.json
     startup_config_mode: none
+  kne:
+    description: KNE topologu
+    file_format: custom
+    file_extension: pb.txt
+    startup_config_mode: inline

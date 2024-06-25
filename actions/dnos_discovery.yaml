@@ -8,10 +8,12 @@ parameters:
     hosts:
         type: string
         description: "dnos hostname"
+        position: 0
     netbox_url:
         type: string
         description: "netbox_url"
+        position: 1
     netbox_secret:
         type: string
         description: "netbox secret"
-
+        position: 2

@@ -1,0 +1,8 @@
+    name: "{{ name }}"
+    vendor: DRIVENETS
+    config: {
+        file: "{{ name }}.cfg"
+        image: "registry.dev.drivenets.net/devops/cdnos_dev_v19_1:19.1.0.101_dev.dev_v19_1"
+    }
+    {% include 'kne/node_params.j2' %}
+    model: "CDNOS"

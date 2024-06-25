@@ -3,6 +3,7 @@ import pynetbox
 from pprint import pprint
 import ipaddress
 import json
+import os
 from dataclasses import dataclass
 from lib.netconf_conn import Netconf
 
@@ -126,15 +127,6 @@ def get_device_info(host, port, username, password, conn=None):
 
     return local_hostname, device_details, neighbor_info, discovered_device_names, detected_peers
 
-
-def output_csv(lldp_info):
-    for key, value in lldp_info.items():
-        for item in value.items():
-            print(
-                f'{key},{item[1].get("remote_system_name")},{item[1].get("local_interface_name")},{item[1].get("remote_interface_name")}')
-
-
-#        success = push_netbox(device_info, list(set(all_devices)), netbox_conn)
 
 def push_netbox(device_info, all_devices, netbox_conn):
     def populating_devices(_device_name, _details):
@@ -298,6 +290,12 @@ class drivenets(Action):
                 print(err)
             # except (ValueError, TypeError) as error:
             #    print(f'failed to read line {device} - {error}')
+
+        output_filename = '/tmp/dnos_discovery.json'
+        if os.path.exists(output_filename):
+            os.unlink(output_filename)
+        with open(output_filename, 'w') as f:
+            f.write(json.dumps(device_info))
 
         success = push_netbox(device_info, list(set(all_devices)), netbox_conn)
         if success:

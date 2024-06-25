@@ -1,0 +1,6 @@
+        {% if configs is defined and configs|length > 0 %}
+        config:
+            {% for c in configs %}
+            - {{ c }}
+            {% endfor %}
+        {% endif %}
