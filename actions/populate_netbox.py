@@ -31,17 +31,13 @@ def setup_netbox(netbox_conn):
     if not netbox_conn.dcim.sites.get(name=netbox_mapping.site):
         netbox_conn.dcim.sites.create({"name": netbox_mapping.site, "slug": netbox_mapping.site.lower()})
 
-    if not netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles):
+    if not netbox_conn.dcim.device_roles.get(name="unknown"):
         netbox_conn.dcim.device_roles.create(
-            {"name": netbox_mapping.device_roles, "slug": netbox_mapping.device_roles.lower()})
+            {"name": "unknown", "slug": "unknown"})
 
     if not netbox_conn.dcim.manufacturers.get(name="unknown"):
         netbox_conn.dcim.manufacturers.create(
             {"name": "unknown", "slug": "unknown"})
-
-    if not netbox_conn.dcim.manufacturers.get(name=netbox_mapping.manufacturers):
-        netbox_conn.dcim.manufacturers.create(
-            {"name": netbox_mapping.manufacturers, "slug": netbox_mapping.manufacturers.lower()})
 
     if not netbox_conn.dcim.device_types.get(model="unknown"):
         netbox_conn.dcim.device_types.create([{
@@ -49,6 +45,14 @@ def setup_netbox(netbox_conn):
             "manufacturer": netbox_conn.dcim.manufacturers.get(name="unknown").id,
             "slug": "unknown"
         }])
+
+    if not netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles):
+        netbox_conn.dcim.device_roles.create(
+            {"name": netbox_mapping.device_roles, "slug": netbox_mapping.device_roles.lower()})
+
+    if not netbox_conn.dcim.manufacturers.get(name=netbox_mapping.manufacturers):
+        netbox_conn.dcim.manufacturers.create(
+            {"name": netbox_mapping.manufacturers, "slug": netbox_mapping.manufacturers.lower()})
 
     if not netbox_conn.dcim.device_types.get(model=netbox_mapping.device_types):
         netbox_conn.dcim.device_types.create([{
@@ -58,7 +62,7 @@ def setup_netbox(netbox_conn):
         }])
 
 
-def push_netbox(device_info, all_devices, netbox_conn):
+def push_netbox(device_info, netbox_conn):
     def populating_devices(_device_name, _details):
         for _device in list(netbox_conn.dcim.devices.all()):
             if _device.name == _device_name:
@@ -71,8 +75,11 @@ def push_netbox(device_info, all_devices, netbox_conn):
                        x.display == _details.get('system_type', "unknown")]
 
         platform = netbox_conn.dcim.platforms.get(q="unknown").id
+        device_roles = netbox_conn.dcim.device_roles.get(q="unknown").id
+
         if _details.get('system_type'):
             platform = netbox_conn.dcim.platforms.get(q="DNOS").id
+            device_roles = netbox_conn.dcim.device_roles.get(q="router").id
 
         print(f'adding dnos device {_device_name} to netbox, type {device_type}')
         print(f"device_type {device_type}, system_type {_details.get('system_type')}")
@@ -80,7 +87,7 @@ def push_netbox(device_info, all_devices, netbox_conn):
         response = netbox_conn.dcim.devices.create(
             name=_device_name,
             device_type=device_type[0],
-            role=netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles).id,
+            role=device_roles,
             site=netbox_conn.dcim.sites.get(name=netbox_mapping.site).id,
             platform=platform,
             custom_fields={"Config": str(_details.get('router_config')),
@@ -132,17 +139,9 @@ def push_netbox(device_info, all_devices, netbox_conn):
 
             print(response)
 
-    # pprint(all_devices)
-
     # Add managed devices
     for device_name, details in device_info.items():
-        if device_name in all_devices:
-            all_devices.remove(device_name)
         populating_devices(device_name, details)
-
-    # Add unmnanaged devices
-    for device_name in all_devices:
-        populating_devices(device_name, {})
 
     # clear unterminated cables
     empty_cables = list()
@@ -153,48 +152,47 @@ def push_netbox(device_info, all_devices, netbox_conn):
 
     # add cable links
     for device in device_info.values():
-        for link in device['lldp_info'].values():
-            try:
-                a_id = None
-                b_id = None
+        if device.get('lldp_info'):
+            for link in device['lldp_info'].values():
+                try:
+                    a_id = None
+                    b_id = None
 
-                a_int = netbox_conn.dcim.interfaces.get(name=link.get('local_interface_name'),
-                                                        device=link.get('local_system_name'))
-                b_int = netbox_conn.dcim.interfaces.get(name=link.get('remote_interface_name'),
-                                                        device=link.get('remote_system_name'))
-                if a_int:
-                    a_id = str(a_int.id)
+                    a_int = netbox_conn.dcim.interfaces.get(name=link.get('local_interface_name'),
+                                                            device=link.get('local_system_name'))
+                    b_int = netbox_conn.dcim.interfaces.get(name=link.get('remote_interface_name'),
+                                                            device=link.get('remote_system_name'))
+                    if a_int:
+                        a_id = str(a_int.id)
 
-                if b_int:
-                    b_id = str(b_int.id)
+                    if b_int:
+                        b_id = str(b_int.id)
 
-                if a_id and b_id:
-                    data_input = {
-                        "a_terminations": [
-                            {
-                                "object_type": "dcim.interface",
-                                "object_id": a_id
-                            }
-                        ],
-                        "b_terminations": [
-                            {
-                                "object_type": "dcim.interface",
-                                "object_id": b_id
-                            }
-                        ]
-                    }
-                    pprint(data_input)
-                    netbox_conn.dcim.cables.create(data_input)
-            except Exception as err:
-                print(err)
+                    if a_id and b_id:
+                        data_input = {
+                            "a_terminations": [
+                                {
+                                    "object_type": "dcim.interface",
+                                    "object_id": a_id
+                                }
+                            ],
+                            "b_terminations": [
+                                {
+                                    "object_type": "dcim.interface",
+                                    "object_id": b_id
+                                }
+                            ]
+                        }
+                        pprint(data_input)
+                        netbox_conn.dcim.cables.create(data_input)
+                except Exception as err:
+                    print(err)
 
-    # pprint(all_devices)
     return True
 
 
 class drivenets(Action):
     def run(self, input_filename, netbox_url, netbox_secret):
-        all_devices = list()
         netbox_conn = pynetbox.api(url=netbox_url,
                                    token=netbox_secret)
 
@@ -203,7 +201,7 @@ class drivenets(Action):
         with open(input_filename, 'r') as f:
             device_info = json.load(f)
 
-        success = push_netbox(device_info, list(set(all_devices)), netbox_conn)
+        success = push_netbox(device_info, netbox_conn)
         if success:
             self.logger.info('Action successfully completed')
         else:
@@ -214,4 +212,4 @@ if __name__ == "__main__":
     netbox_url = "http://100.64.6.154:8000"
     netbox_secret = "3cb50016a9e0bcd3614947d93c3551a198260877"
     runclass = drivenets(Action)
-    runclass.run(netbox_url=netbox_url, netbox_secret=netbox_secret)
+    runclass.run("/tmp/dnos_discovery.json", netbox_url=netbox_url, netbox_secret=netbox_secret)

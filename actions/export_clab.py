@@ -18,12 +18,13 @@ except:
 
 
 class drivenets(Action):
-    def run(self, netbox_url, netbox_secret, template):
+    def run(self, netbox_url, netbox_secret, template, output_dir='/tmp/nrx'):
         os.environ['NB_API_URL'] = str(netbox_url)
         os.environ['NB_API_TOKEN'] = str(netbox_secret)
 
         self.logger.info(subprocess.check_output(
-            ['nrx', '--config', '/opt/stackstorm/packs/drivenets/etc/nrx/nrx.conf', '--output', template]))
+            ['nrx', '--config', '/opt/stackstorm/packs/drivenets/etc/nrx/nrx.conf', '--output', template, '--dir',
+             output_dir]))
 
 
 if __name__ == "__main__":

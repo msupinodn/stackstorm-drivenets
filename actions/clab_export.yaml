@@ -18,4 +18,8 @@ parameters:
         description: Template Type (CLAB or KNE)
         required: true
         default: "kne"
-
+    output_dir:
+        type: string
+        description: result directory
+        required: true
+        default: "/tmp/nrx"

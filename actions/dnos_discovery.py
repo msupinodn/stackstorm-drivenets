@@ -6,6 +6,7 @@ import json
 import os
 from dataclasses import dataclass
 from lib.netconf_conn import Netconf
+import shutil
 
 try:
     from st2common.runners.base_action import Action
@@ -16,18 +17,6 @@ except:
     class Action(object):
         def __init__(self, *args, **kwargs):
             self.logger = logging.getLogger(__name__)
-
-
-@dataclass
-class netbox_mapping:
-    def run(self):
-        pass
-
-    site: str = "SiteA"
-    device_roles: str = "Router"
-    manufacturers: str = "DRIVENETS"
-    device_types: str = "dnos"
-    model: str = "dnos_router"
 
 
 def get_device_info(host, port, username, password, conn=None):
@@ -82,6 +71,7 @@ def get_device_info(host, port, username, password, conn=None):
                         detected_peers.append(remote_mgmt_addr)
                 except ValueError:
                     pass
+        pprint(discovered_device_names)
     except:
         try:
             if conn:
@@ -98,7 +88,13 @@ def get_device_info(host, port, username, password, conn=None):
 
 
 class drivenets(Action):
-    def run(self, hosts, output_filename):
+    def run(self, hosts, output_filename="/tmp/dnos_discovery.json"):
+        if os.path.exists('/tmp/nrx/'):
+            shutil.rmtree('/tmp/nrx/')
+
+        if os.path.exists(output_filename):
+            os.unlink(output_filename)
+
         device_info = dict()
         devices = json.loads(hosts)
 
@@ -108,21 +104,22 @@ class drivenets(Action):
                                  "port": device['port'],
                                  "username": device['username'],
                                  "password": device['password']}
-                hostname, _device_details, _neighbor_info, all_devices, detected_peers = get_device_info(
-                    **device_access)
+                hostname, _device_details, _neighbor_info, all_devices, detected_peers = \
+                    get_device_info(**device_access)
                 device_info[hostname] = dict()
                 device_info[hostname]['host_addr'] = _device_details.get('host_addr')
                 device_info[hostname]['lldp_info'] = _neighbor_info
                 device_info[hostname]['router_config'] = _device_details.get('router_config')
                 device_info[hostname]['system_type'] = _device_details.get('system_type')
                 device_info[hostname]['system_version'] = _device_details.get('system_version')
-            except Exception as err:
-                print(err)
-            # except (ValueError, TypeError) as error:
-            #    print(f'failed to read line {device} - {error}')
 
-        if os.path.exists(output_filename):
-            os.unlink(output_filename)
+                for detected_device in all_devices:
+                    if not device_info.get(detected_device):
+                        device_info[detected_device] = dict()
+
+            except (ValueError, TypeError) as error:
+                print(f'failed to read line {device} - {error}')
+
         with open(output_filename, 'w') as f:
             f.write(json.dumps(device_info))
 
