@@ -28,6 +28,11 @@ class netbox_mapping:
 
 
 def setup_netbox(netbox_conn):
+    if not netbox_conn.extras.custom_fields.filter(q="Config"):
+        netbox_conn.extras.custom_fields.create({"object_types": ["dcim.device"], "type": "text", "name": "Config"})
+    if not netbox_conn.extras.custom_fields.filter(q="Version"):
+        netbox_conn.extras.custom_fields.create({"object_types": ["dcim.device"], "type": "text", "name": "Version"})
+
     if not netbox_conn.dcim.sites.get(name=netbox_mapping.site):
         netbox_conn.dcim.sites.create({"name": netbox_mapping.site, "slug": netbox_mapping.site.lower()})
 
