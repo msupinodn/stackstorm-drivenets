@@ -51,6 +51,12 @@ def setup_netbox(netbox_conn):
             "slug": "unknown"
         }])
 
+    if not netbox_conn.dcim.platforms.get(q="unknown"):
+        netbox_conn.dcim.platforms.create(name="unknown", slug="unknown")
+
+    if not netbox_conn.dcim.platforms.get(q="DNOS"):
+        netbox_conn.dcim.platforms.create(name="DNOS", slug="dnos")
+
     if not netbox_conn.dcim.device_roles.get(name=netbox_mapping.device_roles):
         netbox_conn.dcim.device_roles.create(
             {"name": netbox_mapping.device_roles, "slug": netbox_mapping.device_roles.lower()})
@@ -58,13 +64,6 @@ def setup_netbox(netbox_conn):
     if not netbox_conn.dcim.manufacturers.get(name=netbox_mapping.manufacturers):
         netbox_conn.dcim.manufacturers.create(
             {"name": netbox_mapping.manufacturers, "slug": netbox_mapping.manufacturers.lower()})
-
-    if not netbox_conn.dcim.device_types.get(model=netbox_mapping.device_types):
-        netbox_conn.dcim.device_types.create([{
-            "model": "dnos",
-            "manufacturer": netbox_conn.dcim.manufacturers.get(name=netbox_mapping.manufacturers).id,
-            "slug": "DNOS"
-        }])
 
 
 def push_netbox(device_info, netbox_conn):
@@ -75,6 +74,13 @@ def push_netbox(device_info, netbox_conn):
                 netbox_conn.dcim.devices.delete([_device.id])
 
         print(f"system_type {_details.get('system_type', 'unknown')}")
+
+        if not netbox_conn.dcim.device_types.filter(q=_details.get('system_type')):
+            netbox_conn.dcim.device_types.create([{
+                "model": _details.get('system_type'),
+                "manufacturer": netbox_conn.dcim.manufacturers.get(name="DRIVENETS").id,
+                "slug": _details.get('system_type').lower()
+            }])
 
         device_type = [x.id for x in netbox_conn.dcim.device_types.filter(q=_details.get('system_type')) if
                        x.display == _details.get('system_type', "unknown")]
@@ -198,6 +204,9 @@ def push_netbox(device_info, netbox_conn):
 
 class drivenets(Action):
     def run(self, input_filename, netbox_url, netbox_secret):
+        # netbox_conn = pynetbox.api(url=netbox_url,
+        # token = netbox_conn.create_token("admin", "admin")
+
         netbox_conn = pynetbox.api(url=netbox_url,
                                    token=netbox_secret)
 
